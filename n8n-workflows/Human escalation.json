@@ -1,0 +1,162 @@
+{
+  "name": "Human escalation",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        2688,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst rawInput = typeof input.input === 'string' ? input.input : (input.message || '');\n\nlet name = input.name || input.customer_name || '';\nlet phone = input.phone || input.customer_phone || '';\nlet email = input.email || input.customer_email || '';\nlet issue = input.issue || input.customer_issue || '';\nlet summary = input.summary || input.conversation_summary || '';\n\nif (rawInput) {\n  const nameMatch = rawInput.match(/Name:\\s*([^,\\n]+)/i);\n  const phoneMatch = rawInput.match(/(?:Mobile|Phone)(?:\\s*Number)?:\\s*([^,\\n]+)/i);\n  const emailMatch = rawInput.match(/Email:\\s*([^,\\n]+)/i);\n  const issueMatch = rawInput.match(/Issue:\\s*([^,\\n.]+)/i);\n  const summaryMatch = rawInput.match(/Summary:\\s*([^\\n]+)/i);\n\n  if (!name && nameMatch) name = nameMatch[1].trim();\n  if (!phone && phoneMatch) phone = phoneMatch[1].trim();\n  if (!email && emailMatch) email = emailMatch[1].trim();\n  if (!issue && issueMatch) issue = issueMatch[1].trim();\n  if (!summary && summaryMatch) summary = summaryMatch[1].trim();\n}\n\nif (!name) name = 'Customer';\nif (!issue) issue = 'Requesting to connect with an executive';\n\nconst sessionId = input.sessionId || 'session_' + Date.now();\nconst summaryHtml = summary ? `<p>📄 <b>Summary:</b> ${summary}</p>` : '';\n\nconst teamsMessage = `<div>` +\n  `<p>🚨 <b>New Customer Escalation — Ascend Pharma Chatbot</b></p>` +\n  `<p>👤 <b>Name:</b> ${name}</p>` +\n  `<p>📞 <b>Phone:</b> ${phone || 'Not provided'}</p>` +\n  `<p>✉️ <b>Email:</b> ${email || 'Not provided'}</p>` +\n  `<p>📝 <b>Issue:</b> ${issue}</p>` +\n  summaryHtml +\n  `<p>⏰ <b>Timestamp:</b> ${new Date().toLocaleString()}</p>` +\n`</div>`;\n\nreturn [{\n  json: {\n    conversation_id: sessionId,\n    session_id: sessionId,\n    name,\n    phone,\n    email,\n    issue,\n    summary,\n    teamsMessage,\n    escalated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        48
+      ],
+      "id": "030c510a-96a4-48b1-a5be-25e248780b57",
+      "name": "Format Escalation Details"
+    },
+    {
+      "parameters": {
+        "resource": "channelMessage",
+        "teamId": {
+          "__rl": true,
+          "value": "66e57e56-9f2f-41ed-8ee2-5493485d0f85",
+          "mode": "list",
+          "cachedResultName": "Fortiv Solutions"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "19:a17d6147f20f4d16a5e041a24c4d00e4@thread.tacv2",
+          "mode": "list",
+          "cachedResultName": "Ascend Enquiry Team",
+          "cachedResultUrl": "https://teams.cloud.microsoft/l/channel/19%3Aa17d6147f20f4d16a5e041a24c4d00e4%40thread.tacv2/Ascend%20Enquiry%20Team?groupId=66e57e56-9f2f-41ed-8ee2-5493485d0f85&tenantId=9e3b7f50-60ca-4364-8622-0d4227c8a78c&allowXTenantAccess=False"
+        },
+        "contentType": "html",
+        "message": "={{ $json.teamsMessage }}",
+        "options": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        48
+      ],
+      "id": "e2935e12-50ac-4bf4-8924-081f5f2c28a4",
+      "name": "Send MS Teams Alert",
+      "webhookId": "bc2c54e8-dafd-4c4c-93ae-01a341e0b88b",
+      "credentials": {
+        "microsoftTeamsOAuth2Api": {
+          "id": "szpWfrPE9pNnxXcG",
+          "name": "Microsoft Teams account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "escalations",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "issue",
+              "fieldValue": "={{ $json.issue }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3408,
+        48
+      ],
+      "id": "9f6a2b51-95f7-4ed0-976c-8e265c904438",
+      "name": "Save to Supabase",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nyPbm1KpCSafBrsv",
+          "name": "Web Chatbot"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Format Escalation Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Escalation Details": {
+      "main": [
+        [
+          {
+            "node": "Send MS Teams Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send MS Teams Alert": {
+      "main": [
+        [
+          {
+            "node": "Save to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "89edae99-cb0e-49c1-b04f-c37a2fc9a1cd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fc3412a0986fd9da2be403eaff9ca443fdab3b31644b356e92cd3a7b350bc54b"
+  },
+  "id": "4xvKxGRJynUjDZiO",
+  "tags": []
+}

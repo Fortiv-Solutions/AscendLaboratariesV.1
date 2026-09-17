@@ -158,7 +158,7 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -495,6 +495,9 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
     const updatedHistory = [...messages, userMessage];
     setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     setIsTyping(true);
 
     try {
@@ -923,13 +926,24 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
               className="ascend-ai-input-form"
             >
               <div className="ascend-ai-input-inner">
-                <input
+                <textarea
                   ref={inputRef}
-                  type="text"
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                    const el = e.target;
+                    el.style.height = 'auto';
+                    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
                   placeholder="Ask Ascend AI (e.g., 'Atorvastatin NDC', 'cGMP specs')..."
                   className="ascend-ai-input"
+                  rows={1}
                   spellCheck={false}
                   autoComplete="off"
                   autoCorrect="off"

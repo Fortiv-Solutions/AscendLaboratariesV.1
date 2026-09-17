@@ -1,0 +1,384 @@
+{
+  "name": "Pharma Chatbot - Complete (Sheet + OpenAI + Teams)",
+  "nodes": [
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -2144,
+        1136
+      ],
+      "id": "0d9bb2c6-39d0-4d6c-9c6f-4bc4df687454",
+      "name": "Window Buffer Memory"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pharma-chat",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "d01b151c-7b18-408b-809c-71a14e150515",
+      "name": "Chat Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2688,
+        896
+      ],
+      "webhookId": "pharma-chat-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAX_LEN = 800;\nconst body = $json.body || $json;\n\nconst inputMessage = body.message ?? body.chatInput ?? body.query ?? '';\nconst raw = String(inputMessage).replace(/[\\u0000-\\u001F\\u007F]/g, ' ').trim();\n\nif (!raw) {\n  throw new Error('Empty message received');\n}\n\nconst cleaned = raw.slice(0, MAX_LEN);\n\nreturn [{\n  json: {\n    sessionId: String(body.sessionId ?? '').slice(0, 64) || 'anon-' + Date.now(),\n    message: cleaned,\n    chatInput: cleaned,\n    query: cleaned,\n    contact: {\n      name:  String(body.contactName  ?? '').slice(0, 120),\n      email: String(body.contactEmail ?? '').slice(0, 160),\n      phone: String(body.contactPhone ?? '').slice(0, 40)\n    },\n    market: String(body.market ?? 'IN').toUpperCase().slice(0, 2),\n    locale: String(body.locale ?? 'en').slice(0, 5),\n    pageUrl: String(body.pageUrl ?? '').slice(0, 500),\n    consent: Boolean(body.consent),\n    receivedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "51c9695a-45d0-48db-a5ba-4a3b4d8bc739",
+      "name": "Sanitise Input1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer message:\n\n{{ $json.chatInput }}\n\nUse the connected Excel data source to answer the customer's question when applicable.\n\nIf the customer is requesting human assistance or has provided their contact details (name, phone, email,issue) for an escalation, call the Human Escalation Tool (Call n8n Workflow Tool) with their details.\n",
+        "options": {
+          "systemMessage": "# SYSTEM MESSAGE — CUSTOMER SUPPORT AI AGENT (ASCEND PHARMA)\n \nYou are a professional, friendly, and helpful customer support AI assistant for Ascend Laboratories.\n \nYour responsibilities:\n1. Answer customer questions using the connected **Excel data source** as your source of truth for product, company, and business information.\n2. Escalate to a human executive using the connected **Human Escalation Tool** when needed.\n \n---\n \n## 0. GREETINGS & SMALL TALK\n \n* Messages like \"hello\", \"hi\", \"hey\", \"thanks\", \"good morning\", or other pleasantries are NOT factual questions — do not apply the grounding/Excel-lookup rules to them.\n* Respond to greetings and small talk naturally and warmly, then invite the customer to ask about a product, order, or issue (e.g. \"Hello! I'm the Ascend AI assistant — happy to help with product info, NDC lookups, or connecting you with our team. What can I help you with today?\").\n* Never tell the customer they \"haven't provided a specific question\" in response to a plain greeting — greet them back instead.\n \n## 1. GROUNDING RULES — DO NOT HALLUCINATE\n \n* Treat the Excel data source as the ONLY source of truth for facts such as NDC numbers, product names, strengths, packaging, pricing, and distribution/company details.\n* Before answering any factual question, search the Excel data first.\n* Answer using ONLY what is explicitly present in the matched row(s). Never add, infer, round, or \"fill in\" details that are not directly stated (e.g. never guess a digit of an NDC, a dosage, or a spec that isn't in the data).\n* If the Excel data does not contain the answer, say so plainly — for example: \"I don't have that confirmed in our records, but I can connect you with our team who can help.\" Do not invent a plausible-sounding answer.\n* Never state a fact about a drug, product, or company as certain unless it is directly backed by the Excel data.\n* Do not answer clinical, dosing, or medical-advice questions as if you were a clinician — redirect to a healthcare professional or offer escalation instead.\n* If you are not fully confident an answer is correct and grounded in the data, say you're not sure rather than guessing.\n \n## 2. USING THE EXCEL DATA\n \n* Always search/use the Excel data source first for any product or company-related question.\n* Quote or closely paraphrase what is in the matched row(s); do not embellish or combine facts from different rows into a new claim.\n* If multiple rows could match, ask a clarifying question rather than picking one arbitrarily.\n* If the requested information is not available in Excel, clearly explain that you cannot confirm it, and offer to connect the customer with a human executive.\n \n---\n \n## 3. HUMAN ESCALATION\n \nYou have access to a tool named **human_escalation_tool** (Call n8n Workflow Tool).\n \nUse this tool whenever:\n* The customer explicitly asks for a human, executive, or callback, or\n* The issue cannot be resolved using the Excel data, or\n* The customer seems frustrated or the request is clearly out of scope.\n \n### Escalation Flow:\n1. Ask for the customer's **Full Name**, **Mobile Number**, **Email Address**, and a short description of the **Issue**.\n2. Do not call the tool until you have at least the name and one working contact method (phone or email). If the customer skips a field, explicitly ask for it (e.g. \"Could you also share your email address?\") before proceeding — never silently escalate with a gap you could have asked about.\n3. When calling **human_escalation_tool**, ALWAYS format the input as a single line using this exact labeled template, including every field even when a value is missing:\n\"Name: <name>, Phone: <phone or 'Not provided'>, Email: <email or 'Not provided'>, Issue: <issue>, Summary: <one-sentence summary of the conversation>\"\nNever omit a label — write \"Not provided\" explicitly rather than dropping the field silently.\n4. After calling the tool successfully, confirm to the customer using their name and restate only the contact details they actually gave you:\n\"Thank you! I've escalated your request to our executive team. Someone will get in touch with you shortly at [provided contact details].\"\n5. Never mention n8n, workflows, webhooks, tools, or any other internal/technical system names to the customer.\n \n---\n \n## 4. GENERAL BEHAVIOR\n \n* Be concise, professional, and warm.\n* Never fabricate contact details, prices, dates, or regulatory claims.\n* When uncertain whether something needs escalation, prefer offering escalation over guessing an answer."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -2032,
+        896
+      ],
+      "id": "aadaa72c-87b6-4738-b4bb-c346bfa11aec",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -2320,
+        1136
+      ],
+      "id": "2ad57807-7a6a-46fd-b0f0-f5797ac6b6e1",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "pAMFfAmSg4ednJkE",
+          "name": "Working"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1xvDjZr-PGSxsNLOl7IrpO__YWWlODm6dvkTvyf2VLjQ",
+          "mode": "list",
+          "cachedResultName": "Alkem Product list ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xvDjZr-PGSxsNLOl7IrpO__YWWlODm6dvkTvyf2VLjQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1204725225,
+          "mode": "list",
+          "cachedResultName": "Table 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xvDjZr-PGSxsNLOl7IrpO__YWWlODm6dvkTvyf2VLjQ/edit#gid=1204725225"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -1936,
+        1136
+      ],
+      "id": "3893b1f9-f710-418d-b0c3-74b2e5f04777",
+      "name": "Get row(s) in sheet in Google Sheets1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "oj79N0HlYTw1VqnP",
+          "name": "solutionsfortiv@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Call this tool to escalate the customer request to a human executive. Pass customer name, phone, email, issue, and conversation summary.",
+        "workflowId": {
+          "__rl": true,
+          "value": "4xvKxGRJynUjDZiO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/4xvKxGRJynUjDZiO",
+          "cachedResultName": "Human escalation"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "issue",
+              "displayName": "issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1712,
+        1152
+      ],
+      "id": "6187f9f3-2238-44fb-a951-a56aa55c1241",
+      "name": "Call n8n Workflow Tool1"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1616,
+        896
+      ],
+      "id": "d0149cd4-0998-424d-8470-8d2c26bc6d8c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -944,
+        896
+      ],
+      "id": "adb75cc8-4448-48b9-90ab-4380d247e7a0",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "tableId": "conversations",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_id"
+            },
+            {
+              "fieldId": "session_id"
+            },
+            {
+              "fieldId": "status"
+            },
+            {
+              "fieldId": "escalation_requested"
+            },
+            {
+              "fieldId": "assigned_to"
+            },
+            {
+              "fieldId": "started_at"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        896
+      ],
+      "id": "82e76981-8cf0-4148-9b4b-f3da4ee955ad",
+      "name": "Create a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nyPbm1KpCSafBrsv",
+          "name": "Web Chatbot"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Sanitise Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitise Input1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet in Google Sheets1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call n8n Workflow Tool1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Create a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d4bf977f-be04-44ff-8a29-44f6a7e30af1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fc3412a0986fd9da2be403eaff9ca443fdab3b31644b356e92cd3a7b350bc54b"
+  },
+  "id": "igWzVHxRvmMYjwNM",
+  "tags": []
+}
