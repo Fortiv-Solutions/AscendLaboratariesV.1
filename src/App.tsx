@@ -16,6 +16,7 @@ import { SampleRequestModal } from './components/SampleRequestModal';
 import { PressDetailModal } from './components/PressDetailModal';
 import { AscendAIChatbot } from './components/AscendAIChatbot';
 import './components/AscendAIChatbot.css';
+import './components/voice/voice.css';
 
 export const App: React.FC = () => {
   const [activePage, setActivePage] = useState<ActivePage>('home');

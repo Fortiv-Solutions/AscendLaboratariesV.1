@@ -2,7 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Product, ActivePage } from '../types';
 import { PRODUCTS, THERAPEUTIC_AREAS } from '../data/productsData';
 import { sendChatMessageToN8n } from '../services/n8nChatService';
+import { useRealtimeVoice, toSpeakable } from '../hooks/useRealtimeVoice';
+import { VoicePanel } from './voice/VoicePanel';
+import { VoiceDock } from './voice/VoiceDock';
 import {
+  AudioLines,
+  Mic,
+  MessageSquareText,
   User,
   Send,
   X,
@@ -71,7 +77,7 @@ interface AscendAIChatbotProps {
   onNavigate?: (page: ActivePage) => void;
 }
 
-interface MessageAction {
+export interface MessageAction {
   label: string;
   type: 'product' | 'quote' | 'adverse' | 'navigate' | 'url';
   target?: string;
@@ -87,7 +93,24 @@ interface ChatMessage {
   suggestedQuestions?: string[];
   productCard?: Product;
   feedback?: 'like' | 'dislike';
+  via?: 'voice';
 }
+
+type ChatMode = 'text' | 'voice';
+
+const SITE_PAGES: ActivePage[] = ['home', 'about', 'products', 'quality', 'operations', 'news', 'contact'];
+
+const normalizeName = (value: string) => value.toLowerCase().replace(/[®™]/g, '').replace(/\s+/g, ' ').trim();
+
+/** Match a spoken product name to the catalog, tolerating partial names like "atorvastatin". */
+const findProductByName = (name: unknown): Product | undefined => {
+  if (typeof name !== 'string' || !name.trim()) return undefined;
+  const q = normalizeName(name);
+  return PRODUCTS.find((p) => {
+    const candidates = [p.name, p.genericName, p.brandReference ?? ''].map(normalizeName).filter(Boolean);
+    return candidates.some((c) => c.includes(q) || q.includes(c) || q.includes(c.split(' ')[0]));
+  });
+};
 
 const QUICK_PROMPTS = [
   { label: 'Atorvastatin NDC', query: 'Search Atorvastatin Calcium NDC & strengths', icon: <Pill size={12} /> },
@@ -98,6 +121,7 @@ const QUICK_PROMPTS = [
 
 const TEASER_HINTS = [
   'Ask about 300+ NDCs & cGMP specs',
+  'Now with English voice chat',
   'Instant CoA lot release verification',
   'Wholesale EDI & sample inquiries',
   '24/7 Pharmacovigilance assistance'
@@ -160,17 +184,26 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const [mode, setMode] = useState<ChatMode>('text');
+  const [voiceStartIndex, setVoiceStartIndex] = useState(0);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  // Rich n8n output (product card, actions) waiting to attach to the next spoken answer
+  const pendingVoiceExtrasRef = useRef<Pick<ChatMessage, 'actions' | 'productCard'> | null>(null);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && mode === 'text') {
       scrollToBottom();
       setShowExternalTeaser(false);
       setTimeout(() => inputRef.current?.focus(), 200);
+    } else if (isOpen) {
+      setShowExternalTeaser(false);
     }
-  }, [isOpen, messages, isTyping]);
+  }, [isOpen, messages, isTyping, mode]);
 
   // Web audio chime on bot reply
   const playChime = () => {
@@ -210,6 +243,10 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   };
 
   const handleResetChat = () => {
+    voice.stop('user');
+    voice.clearError();
+    setVoiceStartIndex(0);
+    pendingVoiceExtrasRef.current = null;
     const newSession = 'session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
     try {
       sessionStorage.setItem('ascend_chat_session_id', newSession);
@@ -573,6 +610,128 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Voice mode: speech-to-speech over OpenAI Realtime, grounded by the n8n webhook
+  // ---------------------------------------------------------------------------
+
+  const upsertVoiceMessage = (id: string, update: (existing?: ChatMessage) => ChatMessage | null) => {
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === id);
+      const next = update(idx === -1 ? undefined : prev[idx]);
+      if (idx === -1) return next ? [...prev, next] : prev;
+      const copy = [...prev];
+      if (next) copy[idx] = next;
+      else copy.splice(idx, 1);
+      return copy;
+    });
+  };
+
+  // Keep the call running while a modal opens over the site; it continues in the docked pill
+  const dockForModal = () => setIsOpen(false);
+
+  const handleVoiceTool = async (name: string, args: Record<string, unknown>): Promise<unknown> => {
+    switch (name) {
+      case 'ask_ascend_knowledge': {
+        const question = String(args.question ?? '').trim();
+        if (!question) return { error: 'No question was provided.' };
+        const history = messagesRef.current
+          .filter((m) => m.text.trim())
+          .map((m) => ({ sender: m.sender, text: m.text }));
+        const n8n = await sendChatMessageToN8n(question, sessionId, history);
+        const source = n8n && n8n.text.trim() ? n8n : generateAIResponse(question);
+        pendingVoiceExtrasRef.current = { actions: source.actions, productCard: source.productCard };
+        return {
+          answer: toSpeakable(source.text).slice(0, 2400),
+          guidance: 'Answer conversationally in one to three sentences, then offer more detail if useful.',
+        };
+      }
+      case 'show_product': {
+        const product = findProductByName(args.product_name);
+        if (!product) return { ok: false, message: 'That product is not in the catalog shown on this site.' };
+        onSelectProduct?.(product);
+        dockForModal();
+        return { ok: true, opened: product.name };
+      }
+      case 'navigate_site': {
+        const page = args.page as ActivePage;
+        if (!SITE_PAGES.includes(page)) return { ok: false, message: 'Unknown page.' };
+        onNavigate?.(page);
+        return { ok: true, page };
+      }
+      case 'open_adverse_event_form':
+        onOpenAdverseEvent?.();
+        dockForModal();
+        return { ok: true, message: 'The adverse event form is now open on screen.' };
+      case 'request_quote': {
+        const product = findProductByName(args.product_name) ?? PRODUCTS[0];
+        onRequestQuote?.(product);
+        dockForModal();
+        return { ok: true, product: product.name };
+      }
+      default:
+        return { error: `Unknown tool ${name}.` };
+    }
+  };
+
+  const voice = useRealtimeVoice({
+    onUserTurnStarted: (itemId) =>
+      upsertVoiceMessage(`voice-user-${itemId}`, (existing) =>
+        existing ?? { id: `voice-user-${itemId}`, sender: 'user', text: '', timestamp: 'Just now', via: 'voice' }
+      ),
+    onUserTranscript: (itemId, transcript) =>
+      upsertVoiceMessage(`voice-user-${itemId}`, (existing) =>
+        transcript
+          ? { ...(existing ?? { id: `voice-user-${itemId}`, sender: 'user', timestamp: 'Just now', via: 'voice' }), text: transcript }
+          : null
+      ),
+    onUserTranscriptFailed: (itemId) => upsertVoiceMessage(`voice-user-${itemId}`, () => null),
+    onAssistantDelta: (responseId, delta) =>
+      upsertVoiceMessage(`voice-bot-${responseId}`, (existing) =>
+        existing
+          ? { ...existing, text: existing.text + delta }
+          : { id: `voice-bot-${responseId}`, sender: 'bot', text: delta, timestamp: 'Just now', via: 'voice' }
+      ),
+    onAssistantDone: (responseId, transcript) => {
+      const extras = pendingVoiceExtrasRef.current;
+      pendingVoiceExtrasRef.current = null;
+      upsertVoiceMessage(`voice-bot-${responseId}`, (existing) => {
+        const text = transcript || existing?.text || '';
+        if (!text) return null;
+        return {
+          ...(existing ?? { id: `voice-bot-${responseId}`, sender: 'bot', timestamp: 'Just now', via: 'voice' }),
+          text,
+          ...(extras ?? {}),
+        };
+      });
+    },
+    onToolCall: handleVoiceTool,
+  });
+
+  const voiceInCall = voice.phase === 'live' || voice.phase === 'connecting';
+
+  useEffect(() => {
+    if (voice.phase === 'connecting') setVoiceStartIndex(messagesRef.current.length);
+  }, [voice.phase]);
+
+  const switchMode = (next: ChatMode) => {
+    if (next === mode) return;
+    if (next === 'text') {
+      voice.stop('user');
+      voice.clearError();
+    } else {
+      setVoiceStartIndex(messages.length);
+    }
+    setMode(next);
+  };
+
+  // Captions for the live stage come from this voice session's turns only
+  const voiceTurns = messages.slice(voiceStartIndex).filter((m) => m.via === 'voice');
+  const lastUserIdx = voiceTurns.map((m) => m.sender).lastIndexOf('user');
+  const lastBotIdx = voiceTurns.map((m) => m.sender).lastIndexOf('bot');
+  const userCaption = lastUserIdx === -1 ? null : voiceTurns[lastUserIdx].text;
+  const assistantCaption = lastBotIdx > lastUserIdx ? voiceTurns[lastBotIdx].text : '';
+  const latestVoiceAnswer = [...voiceTurns].reverse().find((m) => m.sender === 'bot' && (m.productCard || m.actions?.length));
+
   // Helper to parse text with rich bold and highlighted code tags
   const renderFormattedInlineText = (text: string) => {
     // Regex splits by bold (**...**) and backticks (`...`)
@@ -600,6 +759,10 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
     <>
       {/* Floating launcher trigger button with website favicon & interactive message */}
       <div className="ascend-ai-launcher-wrapper">
+        {!isOpen && voiceInCall ? (
+          <VoiceDock voice={voice} onExpand={() => setIsOpen(true)} />
+        ) : (
+        <>
         {!isOpen && showExternalTeaser && (
           <div className="ascend-ai-teaser-card" onClick={() => setIsOpen(true)}>
             <div className="ascend-ai-teaser-inner">
@@ -652,12 +815,14 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
             {isOpen ? 'Close' : 'Ascend AI'}
           </span>
         </button>
+        </>
+        )}
       </div>
 
       {/* Chatbot Window */}
       {isOpen && (
         <div
-          className={`ascend-ai-window ${isExpanded ? 'is-fullscreen' : ''}`}
+          className={`ascend-ai-window ${isExpanded ? 'is-fullscreen' : ''} ${mode === 'voice' ? 'is-voice' : ''}`}
           role="dialog"
           aria-label="Ascend AI Assistant"
         >
@@ -667,19 +832,46 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
               <div className="ascend-ai-avatar">
                 <AscendFaviconIcon size={28} withBackground />
               </div>
-              <div>
+              <div className="ascend-ai-header-titles">
                 <div className="ascend-ai-title-row">
                   <h3 className="ascend-ai-title">Ascend AI</h3>
                   <ShieldCheck size={14} color="#06028A" />
                 </div>
                 <div className="ascend-ai-status">
-                  <span className="ascend-ai-status-dot" />
-                  <span>Online · Pharmaceutical Assistant</span>
+                  <span className={`ascend-ai-status-dot ${voiceInCall ? 'is-live' : ''}`} />
+                  <span>{mode === 'voice' ? (voiceInCall ? 'Live voice · English' : 'Voice · English') : 'Online · Text chat'}</span>
                 </div>
               </div>
             </div>
 
+            <div className="ascend-mode-toggle" data-mode={mode} role="group" aria-label="Conversation mode">
+              <span className="ascend-mode-thumb" aria-hidden="true" />
+              <button
+                type="button"
+                className={`ascend-mode-option ${mode === 'text' ? 'is-active' : ''}`}
+                onClick={() => switchMode('text')}
+                aria-pressed={mode === 'text'}
+                aria-label="Text chat"
+                title={voiceInCall ? 'Text chat — ends the voice chat' : 'Text chat'}
+              >
+                <MessageSquareText size={13} />
+                <span>Text</span>
+              </button>
+              <button
+                type="button"
+                className={`ascend-mode-option ${mode === 'voice' ? 'is-active' : ''}`}
+                onClick={() => switchMode('voice')}
+                aria-pressed={mode === 'voice'}
+                aria-label="Voice chat"
+                title="Voice chat"
+              >
+                <AudioLines size={13} />
+                <span>Voice</span>
+              </button>
+            </div>
+
             <div className="ascend-ai-header-actions">
+              {mode === 'text' && (
               <button
                 className="ascend-ai-tool-btn"
                 onClick={() => setSoundEnabled(!soundEnabled)}
@@ -688,6 +880,7 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
               >
                 {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
               </button>
+              )}
               <button
                 className="ascend-ai-tool-btn"
                 onClick={handleResetChat}
@@ -707,14 +900,34 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
               <button
                 className="ascend-ai-tool-btn ascend-ai-close-btn"
                 onClick={() => setIsOpen(false)}
-                title="Close"
-                aria-label="Close"
+                title={voiceInCall ? 'Minimize — the voice chat keeps going' : 'Close'}
+                aria-label={voiceInCall ? 'Minimize voice chat' : 'Close'}
               >
                 <X size={17} />
               </button>
             </div>
           </div>
 
+          {mode === 'voice' ? (
+            <VoicePanel
+              voice={voice}
+              userCaption={userCaption}
+              assistantCaption={assistantCaption}
+              productCard={latestVoiceAnswer?.productCard}
+              actions={latestVoiceAnswer?.actions}
+              expanded={isExpanded}
+              onAction={(act) => {
+                handleActionClick(act);
+                if (act.type !== 'navigate') setIsOpen(false);
+              }}
+              onViewProduct={(product) => {
+                onSelectProduct?.(product);
+                setIsOpen(false);
+              }}
+              onSwitchToText={() => switchMode('text')}
+            />
+          ) : (
+          <>
           {/* Quick Prompts Bar */}
           <div className="ascend-ai-quick-strip">
             {QUICK_PROMPTS.map((p, idx) => (
@@ -749,10 +962,17 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
                     <span className="ascend-ai-bubble-name">
                       {msg.sender === 'user' ? 'You' : 'Ascend AI'}
                     </span>
+                    {msg.via === 'voice' && (
+                      <span className="ascend-ai-voice-badge" title="Spoken in voice chat">
+                        <Mic size={9} strokeWidth={2.6} />
+                        <span>Voice</span>
+                      </span>
+                    )}
                     <span className="ascend-ai-bubble-time">{msg.timestamp}</span>
                   </div>
 
                   <div className="ascend-ai-bubble-body">
+                    {!msg.text && <p className="ascend-ai-msg-p">…</p>}
                     {msg.text.split('\n').map((line, idx) => {
                       if (line.startsWith('### ')) {
                         return (
@@ -963,6 +1183,8 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
               <span>Official Ascend Laboratories Assistant · 24/7 Clinical &amp; Commercial Support</span>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
     </>
