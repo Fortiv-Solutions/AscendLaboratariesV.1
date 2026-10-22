@@ -143,7 +143,7 @@ export const VoicePanel: React.FC<VoicePanelProps> = ({
             <span>Start voice chat</span>
           </button>
         </div>
-        <p className="ascend-voice-fineprint">English only · Uses your microphone · Audio is processed by OpenAI</p>
+        <p className="ascend-voice-fineprint">English only · Uses your microphone</p>
       </div>
     );
   }
@@ -154,10 +154,6 @@ export const VoicePanel: React.FC<VoicePanelProps> = ({
   return (
     <div className={`ascend-voice-stage is-live is-${phase === 'connecting' ? 'connecting' : activity}`}>
       <div className="ascend-voice-topline">
-        <span className="ascend-voice-state" aria-live="polite">
-          <span className="ascend-voice-state-dot" />
-          {voiceStatusLabel(voice)}
-        </span>
         <span className="ascend-voice-timer">{phase === 'live' ? formatElapsed(voice.elapsedMs) : '--:--'}</span>
       </div>
 

@@ -119,14 +119,6 @@ const QUICK_PROMPTS = [
   { label: 'Wholesaler EDI Ordering', query: 'How to order via AmerisourceBergen / McKesson EDI?', icon: <ExternalLink size={12} /> }
 ];
 
-const TEASER_HINTS = [
-  'Ask about 300+ NDCs & cGMP specs',
-  'Now with English voice chat',
-  'Instant CoA lot release verification',
-  'Wholesale EDI & sample inquiries',
-  '24/7 Pharmacovigilance assistance'
-];
-
 export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   onSelectProduct,
   onRequestQuote,
@@ -135,9 +127,6 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showExternalTeaser, setShowExternalTeaser] = useState(true);
-  const [teaserHintIndex, setTeaserHintIndex] = useState(0);
-  const [isTeaserFading, setIsTeaserFading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -154,18 +143,6 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
     }
   });
 
-  useEffect(() => {
-    if (isOpen || !showExternalTeaser) return;
-    const interval = setInterval(() => {
-      setIsTeaserFading(true);
-      setTimeout(() => {
-        setTeaserHintIndex((prev) => (prev + 1) % TEASER_HINTS.length);
-        setIsTeaserFading(false);
-      }, 260);
-    }, 3800);
-    return () => clearInterval(interval);
-  }, [isOpen, showExternalTeaser]);
-  
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-msg',
@@ -198,10 +175,7 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   useEffect(() => {
     if (isOpen && mode === 'text') {
       scrollToBottom();
-      setShowExternalTeaser(false);
       setTimeout(() => inputRef.current?.focus(), 200);
-    } else if (isOpen) {
-      setShowExternalTeaser(false);
     }
   }, [isOpen, messages, isTyping, mode]);
 
@@ -757,47 +731,12 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
 
   return (
     <>
-      {/* Floating launcher trigger button with website favicon & interactive message */}
+      {/* Floating launcher trigger button */}
       <div className="ascend-ai-launcher-wrapper">
         {!isOpen && voiceInCall ? (
           <VoiceDock voice={voice} onExpand={() => setIsOpen(true)} />
         ) : (
         <>
-        {!isOpen && showExternalTeaser && (
-          <div className="ascend-ai-teaser-card" onClick={() => setIsOpen(true)}>
-            <div className="ascend-ai-teaser-inner">
-              <div className="ascend-ai-teaser-icon-slot">
-                <AscendFaviconIcon size={16} withBackground />
-              </div>
-              <div className="ascend-ai-teaser-text">
-                <div className="ascend-ai-teaser-title-row">
-                  <strong>Ascend AI</strong>
-                  <span className="ascend-ai-teaser-live-dot" />
-                </div>
-                <p
-                  key={TEASER_HINTS[teaserHintIndex]}
-                  className={`ascend-ai-teaser-hint-text ${isTeaserFading ? 'is-fading' : ''}`}
-                >
-                  {TEASER_HINTS[teaserHintIndex]}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowExternalTeaser(false);
-                }}
-                className="ascend-ai-teaser-close"
-                title="Dismiss"
-                aria-label="Dismiss message"
-              >
-                <X size={12} />
-              </button>
-            </div>
-            <span className="ascend-ai-teaser-arrow" />
-          </div>
-        )}
-
         <button
           className={`ascend-ai-trigger-btn ${isOpen ? 'active' : ''}`}
           onClick={() => setIsOpen(!isOpen)}

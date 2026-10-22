@@ -3,7 +3,7 @@
    Official Favicon Integration · High-Contrast Typography · Perfect Layout
    ========================================================================== */
 
-/* 1. Floating Launcher Button & Interactive External Teaser Card */
+/* 1. Floating Launcher Button */
 .ascend-ai-launcher-wrapper {
   position: fixed;
   bottom: 24px;
@@ -15,148 +15,10 @@
   gap: 12px;
 }
 
-/* Interactive Teaser Speech Card — Ultra Sleek & Compact Horizontal Capsule */
-.ascend-ai-teaser-card {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-full);
-  padding: 6px 12px 6px 8px;
-  box-shadow: 0 8px 24px rgba(6, 2, 138, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04), var(--inner-hi);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  cursor: pointer;
-  position: relative;
-  animation: teaserEnter 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards, teaserHoverFloat 4.5s ease-in-out 320ms infinite alternate;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
-}
-
+/* Entry animation, shared with the voice dock (voice/voice.css) */
 @keyframes teaserEnter {
   0% { opacity: 0; transform: translateY(12px) scale(0.95); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes teaserHoverFloat {
-  0% { transform: translateY(0px); }
-  100% { transform: translateY(-4px); }
-}
-
-.ascend-ai-teaser-card:hover {
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 14px 34px rgba(6, 2, 138, 0.2), var(--inner-hi);
-  border-color: rgba(6, 2, 138, 0.25);
-}
-
-.ascend-ai-teaser-inner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ascend-ai-teaser-icon-slot {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: #ffffff;
-  border: 1px solid var(--line-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(6, 2, 138, 0.08);
-}
-
-.ascend-ai-teaser-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-  min-width: 175px;
-}
-
-.ascend-ai-teaser-title-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ascend-ai-teaser-title-row strong {
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--brand-navy);
-  letter-spacing: -0.01em;
-}
-
-.ascend-ai-teaser-live-dot {
-  position: relative;
-  width: 5.5px;
-  height: 5.5px;
-  border-radius: 50%;
-  background: #10b981;
-  display: inline-block;
-}
-
-.ascend-ai-teaser-live-dot::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 50%;
-  background: #10b981;
-  animation: liveDotRadar 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-  pointer-events: none;
-}
-
-@keyframes liveDotRadar {
-  0% { transform: scale(0.8); opacity: 0.8; }
-  100% { transform: scale(2.6); opacity: 0; }
-}
-
-.ascend-ai-teaser-hint-text {
-  font-size: 10px;
-  color: var(--ink-3);
-  font-weight: 500;
-  margin: 0;
-  animation: hintSlideIn 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transition: opacity 0.26s ease, transform 0.26s cubic-bezier(0.16, 1, 0.3, 1), filter 0.26s ease;
-}
-
-.ascend-ai-teaser-hint-text.is-fading {
-  opacity: 0;
-  transform: translateY(-5px);
-  filter: blur(2px);
-}
-
-@keyframes hintSlideIn {
-  0% { opacity: 0; transform: translateY(5px); filter: blur(2px); }
-  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
-}
-
-.ascend-ai-teaser-close {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-4);
-  margin-left: 4px;
-  transition: all 0.15s ease;
-}
-
-.ascend-ai-teaser-close:hover {
-  background: rgba(242, 61, 38, 0.1);
-  color: var(--brand-red);
-}
-
-.ascend-ai-teaser-arrow {
-  position: absolute;
-  bottom: -4px;
-  right: 26px;
-  width: 8px;
-  height: 8px;
-  background: #ffffff;
-  border-right: 1px solid var(--line-2);
-  border-bottom: 1px solid var(--line-2);
-  transform: rotate(45deg);
 }
 
 /* Floating Launcher Capsule Button */
