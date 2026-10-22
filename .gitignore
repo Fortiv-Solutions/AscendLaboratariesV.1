@@ -31,3 +31,10 @@ dist-ssr
 # IDE & AI directories
 .gemini
 .agents
+
+# Python backend
+__pycache__/
+*.pyc
+.venv/
+backend/service-account*.json
+backend/google-token.json

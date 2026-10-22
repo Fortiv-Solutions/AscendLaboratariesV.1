@@ -9,13 +9,13 @@
  *   OPENAI_API_KEY              required
  *   OPENAI_REALTIME_MODEL       default gpt-realtime-2.1
  *   OPENAI_REALTIME_VOICE       default marin
- *   OPENAI_TRANSCRIBE_MODEL     default gpt-4o-mini-transcribe
+ *   OPENAI_TRANSCRIBE_MODEL     default whisper-1
  *   ALLOWED_ORIGINS             optional comma-separated list of extra origins
  */
 
 const MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1';
 const VOICE = process.env.OPENAI_REALTIME_VOICE || 'marin';
-const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe';
+const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1';
 
 const SITE_PAGES = ['home', 'about', 'products', 'quality', 'operations', 'news', 'contact'];
 

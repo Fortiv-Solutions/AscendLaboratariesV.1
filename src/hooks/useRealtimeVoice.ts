@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *
  * Flow: mic → WebRTC → realtime model → spoken reply on a remote audio track.
  * Server events arrive on the "oai-events" data channel; function calls are
- * delegated to `onToolCall` so answers stay grounded in the n8n knowledge base.
+ * delegated to `onToolCall` so answers stay grounded in the chat API knowledge base.
  */
 
 const SESSION_ENDPOINT = '/api/realtime-session';

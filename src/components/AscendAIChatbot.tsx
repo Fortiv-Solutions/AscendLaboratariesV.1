@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Product, ActivePage } from '../types';
 import { PRODUCTS, THERAPEUTIC_AREAS } from '../data/productsData';
-import { sendChatMessageToN8n } from '../services/n8nChatService';
+import { sendChatMessage } from '../services/chatService';
 import { useRealtimeVoice, toSpeakable } from '../hooks/useRealtimeVoice';
 import { VoicePanel } from './voice/VoicePanel';
 import { VoiceDock } from './voice/VoiceDock';
@@ -188,7 +188,7 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   const [voiceStartIndex, setVoiceStartIndex] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  // Rich n8n output (product card, actions) waiting to attach to the next spoken answer
+  // Rich chat-API output (product card, actions) waiting to attach to the next spoken answer
   const pendingVoiceExtrasRef = useRef<Pick<ChatMessage, 'actions' | 'productCard'> | null>(null);
 
   const scrollToBottom = () => {
@@ -538,8 +538,8 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
     setIsTyping(true);
 
     try {
-      // Connect to n8n pharma-chat webhook
-      const n8nResponse = await sendChatMessageToN8n(
+      // Ask the FastAPI chat backend
+      const apiResponse = await sendChatMessage(
         query.trim(),
         sessionId,
         updatedHistory.map((m) => ({ sender: m.sender, text: m.text }))
@@ -547,18 +547,18 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
 
       let botMessage: ChatMessage;
 
-      if (n8nResponse && n8nResponse.text && n8nResponse.text.trim()) {
+      if (apiResponse && apiResponse.text && apiResponse.text.trim()) {
         botMessage = {
           id: 'bot-' + Date.now(),
           sender: 'bot',
-          text: n8nResponse.text,
+          text: apiResponse.text,
           timestamp: 'Just now',
-          actions: n8nResponse.actions,
-          productCard: n8nResponse.productCard,
-          suggestedQuestions: n8nResponse.suggestedQuestions
+          actions: apiResponse.actions,
+          productCard: apiResponse.productCard,
+          suggestedQuestions: apiResponse.suggestedQuestions
         };
       } else {
-        // Fallback to internal knowledge engine if webhook returns empty or is in setup
+        // Fallback to internal knowledge engine if the chat API is unreachable or returns empty
         const fallback = generateAIResponse(query);
         botMessage = {
           id: 'bot-' + Date.now(),
@@ -611,7 +611,7 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
   };
 
   // ---------------------------------------------------------------------------
-  // Voice mode: speech-to-speech over OpenAI Realtime, grounded by the n8n webhook
+  // Voice mode: speech-to-speech over OpenAI Realtime, grounded by the chat API
   // ---------------------------------------------------------------------------
 
   const upsertVoiceMessage = (id: string, update: (existing?: ChatMessage) => ChatMessage | null) => {
@@ -637,8 +637,8 @@ export const AscendAIChatbot: React.FC<AscendAIChatbotProps> = ({
         const history = messagesRef.current
           .filter((m) => m.text.trim())
           .map((m) => ({ sender: m.sender, text: m.text }));
-        const n8n = await sendChatMessageToN8n(question, sessionId, history);
-        const source = n8n && n8n.text.trim() ? n8n : generateAIResponse(question);
+        const api = await sendChatMessage(question, sessionId, history);
+        const source = api && api.text.trim() ? api : generateAIResponse(question);
         pendingVoiceExtrasRef.current = { actions: source.actions, productCard: source.productCard };
         return {
           answer: toSpeakable(source.text).slice(0, 2400),

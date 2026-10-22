@@ -38,7 +38,7 @@ function realtimeSessionDevApi(): Plugin {
 
 export default defineConfig(({ mode }) => {
   // Expose server-only secrets from .env to the dev API handler (never to the client bundle)
-  Object.assign(process.env, loadEnv(mode, process.cwd(), ['OPENAI_', 'ALLOWED_ORIGINS']));
+  Object.assign(process.env, loadEnv(mode, process.cwd(), ['OPENAI_', 'ALLOWED_ORIGINS', 'CHAT_API_PROXY_TARGET']));
 
   return {
     plugins: [react(), realtimeSessionDevApi()],
@@ -46,11 +46,10 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: true,
       proxy: {
-        '/api/n8n': {
-          target: 'https://n8n.fortivautomation.cloud',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/api\/n8n/, '')
+        // FastAPI chat backend: `uvicorn app.main:app --reload --port 8000` in backend/
+        '/api/chat': {
+          target: process.env.CHAT_API_PROXY_TARGET || 'http://localhost:8000',
+          changeOrigin: true
         }
       }
     }
