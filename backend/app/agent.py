@@ -6,7 +6,7 @@ import logging
 from openai import AsyncOpenAI
 
 from .config import Settings
-from .prompts import SYSTEM_PROMPT, TOOLS
+from .prompts import SYSTEM_PROMPT, TOOLS, USER_PROMPT_TEMPLATE
 from .supabase_store import SupabaseStore
 from .tools.escalation import escalate
 from .tools.products import ProductCatalog
@@ -28,7 +28,9 @@ class ChatAgent:
         if self._client is None:
             # Created lazily so the server can boot (and report health) without a key
             self._client = AsyncOpenAI(api_key=self._settings.openai_api_key)
-        messages: list = [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "user", "content": message}]
+        # Memory keeps the raw text; only the current turn gets the n8n-style wrapper
+        prompt = USER_PROMPT_TEMPLATE.format(message=message)
+        messages: list = [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "user", "content": prompt}]
         escalated = False
 
         for _ in range(MAX_TOOL_ROUNDS):
